@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>365存钱计划</title>
+<!-- SheetJS / ExcelJS: 导出美化Excel -->
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'PingFang SC','Helvetica Neue',sans-serif;background:#eef0f4;color:#1f2937;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 15% 30%,rgba(56,139,253,.06) 0,transparent 50%),radial-gradient(ellipse at 85% 70%,rgba(63,185,80,.05) 0,transparent 50%),radial-gradient(ellipse at 50% 10%,rgba(210,168,255,.04) 0,transparent 40%);pointer-events:none;z-index:0}
+.app{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:20px 16px 80px}
+
+/* header */
+.hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px}
+.hdr h1{font-size:1.6rem;font-weight:700;background:linear-gradient(135deg,#58a6ff,#3fb950,#d2a8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sync-btns{display:flex;gap:6px}
+.btn{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn-sync{background:rgba(56,139,253,.12);border:1px solid rgba(56,139,253,.25);color:#58a6ff}
+.btn-sync:hover{background:rgba(56,139,253,.22)}
+.btn-green{background:linear-gradient(135deg,#238636,#3fb950);color:#fff;box-shadow:0 3px 12px rgba(35,134,54,.3)}
+.btn-gold{background:rgba(210,169,34,.12);border:1px solid rgba(210,169,34,.3);color:#d29922}
+.btn-gold:hover{background:rgba(210,169,34,.22)}
+.btn-purple{background:rgba(210,168,255,.12);border:1px solid rgba(210,168,255,.3);color:#d2a8ff}
+.btn-purple:hover{background:rgba(210,168,255,.22)}
+.btn-red{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.25);color:#f85149;padding:4px 10px;font-size:.72rem}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.st{background:#fff;border:1px solid #e8ecf1;border-radius:14px;padding:14px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.st-val{font-size:1.4rem;font-weight:800}
+.st-val.blue{color:#2563eb}.st-val.green{color:#16a34a}.st-val.gold{color:#d97706}.st-val.purple{color:#7c3aed}
+.st-lbl{font-size:.7rem;color:#6b7280;margin-top:3px}
+
+/* progress bar */
+.prog-wrap{margin-bottom:20px}
+.prog-hdr{display:flex;justify-content:space-between;font-size:.78rem;color:#6b7280;margin-bottom:6px}
+.prog-track{background:#e5e7eb;border-radius:999px;height:12px;overflow:hidden}
+.prog-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#238636,#3fb950,#58a6ff,#d2a8ff);transition:width .6s ease}
+
+/* filter & view toggle */
+.toolbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.toolbar label{font-size:.78rem;color:#6b7280}
+.toggle-btn{padding:5px 12px;border-radius:8px;border:1px solid #d1d5db;background:#fff;color:#6b7280;cursor:pointer;font-size:.75rem;transition:all .2s}
+.toggle-btn:hover{background:#f3f4f6}
+.toggle-btn.active{background:rgba(63,185,80,.1);border-color:#16a34a;color:#16a34a}
+
+/* grid */
+.grid-wrap{margin-bottom:24px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px}
+.cell{position:relative;border-radius:10px;text-align:center;padding:8px 4px;transition:all .3s;cursor:default;user-select:none}
+.cell-inner{display:flex;flex-direction:column;align-items:center;gap:2px}
+.cell-day{font-size:.65rem;color:#9ca3af}
+.cell-amt{font-size:1rem;font-weight:700}
+
+/* cell states */
+.cell.done{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.2);opacity:.55;cursor:pointer}
+.cell.done:hover{opacity:.8;background:rgba(248,81,73,.08);border-color:rgba(248,81,73,.3)}
+.cell.done .cell-amt{color:#16a34a;text-decoration:line-through}
+.cell.done .cell-day{color:rgba(63,185,80,.5)}
+.cell.done .done-check{display:inline}
+.cell.done .cell-amt{font-size:.8rem}
+
+.cell.affordable{background:rgba(56,139,253,.08);border:1px solid rgba(56,139,253,.2)}
+.cell.affordable .cell-amt{color:#2563eb}
+.cell.affordable{cursor:pointer}
+.cell.affordable:hover{background:rgba(56,139,253,.15);transform:translateY(-2px);box-shadow:0 4px 12px rgba(56,139,253,.15)}
+
+.cell.pending{background:rgba(210,169,34,.06);border:1px solid rgba(210,169,34,.12)}
+.cell.pending .cell-amt{color:#d97706}
+
+.cell:not(.done):not(.affordable):not(.pending){background:#fff;border:1px solid #e8ecf1}
+.cell:not(.done):not(.affordable):not(.pending) .cell-amt{color:#9ca3af}
+
+.done-check{display:none;font-size:.6rem;color:#16a34a;margin-left:2px}
+
+/* batch mode */
+.cell.batch-selected{background:rgba(248,81,73,.12)!important;border-color:#f85149!important;opacity:1!important;box-shadow:0 0 0 2px rgba(248,81,73,.3)}
+.cell.batch-selected .cell-amt{color:#f85149!important;text-decoration:none!important;font-weight:800}
+.cell.batch-selected .done-check{display:inline!important;color:#f85149;content:'✕'}
+
+/* pending pool */
+.pool-section{background:#fffbeb;border:1px solid #fde68a;border-radius:14px;padding:18px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.03)}
+.pool-section h3{font-size:.9rem;color:#b45309;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.pool-input-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+.pool-input-row input{background:#fff;border:1px solid #d1d5db;border-radius:8px;padding:8px 12px;color:#2d3748;font-size:.82rem;outline:none}
+.pool-input-row input:focus{border-color:#d97706}
+.pool-info{display:flex;gap:16px;margin-bottom:12px;font-size:.82rem;flex-wrap:wrap}
+.pool-info span{color:#6b7280}
+.pool-info b{color:#b45309}
+.pool-matches{font-size:.82rem;color:#6b7280;margin-top:8px}
+.pool-matches b{color:#2563eb}
+.pool-log{margin-top:12px;max-height:150px;overflow-y:auto}
+.pool-log-item{font-size:.75rem;color:#6b7280;padding:4px 0;border-bottom:1px solid #f3f4f6}
+.pool-log-item b{color:#16a34a}
+
+/* month separator */
+.month-sep{grid-column:1/-1;font-size:.8rem;font-weight:700;color:#2563eb;padding:8px 0 4px;border-bottom:1px solid rgba(56,139,253,.12);margin-top:4px}
+.month-sep:first-child{margin-top:0}
+
+/* rules */
+.rules{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px;font-size:.75rem;color:#6b7280;line-height:1.8;margin-bottom:20px}
+.rules b{color:#2563eb}
+
+/* toast */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(60px);background:#16a34a;color:#fff;padding:10px 24px;border-radius:999px;font-size:.82rem;font-weight:600;transition:transform .3s,opacity .3s;opacity:0;z-index:999;box-shadow:0 4px 12px rgba(22,163,74,.3)}
+.toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* summary card */
+.summary-card{background:#fff;border:1px solid #e8ecf1;border-radius:14px;padding:18px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.summary-card h3{font-size:.9rem;color:#4b5563;margin-bottom:12px}
+.sum-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f3f4f6;font-size:.82rem}
+.sum-row:last-child{border-bottom:none}
+.sum-label{color:#6b7280}
+.sum-val{font-weight:600}
+.sum-val.g{color:#16a34a}.sum-val.b{color:#2563eb}.sum-val.o{color:#d97706}
+
+@media(max-width:600px){
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(65px,1fr));gap:5px}
+  .st-val{font-size:1.1rem}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="hdr">
+  <h1>💰 365存钱计划</h1>
+  <div class="sync-btns">
+    <button class="btn btn-green" onclick="cloudSave()" id="btnCloudSave" title="保存到云端">☁️ 云端保存</button>
+    <button class="btn btn-purple" onclick="cloudLoad()" id="btnCloudLoad" title="从云端加载">⬇️ 云端加载</button>
+    <button class="btn btn-sync" onclick="resetGistConfig()" title="修改云端配置">⚙️ 配置</button>
+    <button class="btn btn-gold" onclick="exportExcel()" title="导出Excel表格">📊 导出Excel</button>
+    <button class="btn btn-sync" onclick="exportData()" title="导出JSON备份">📤 JSON</button>
+    <button class="btn btn-sync" onclick="document.getElementById('importFile').click()" title="导入JSON备份">📥 导入</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)"/>
+  </div>
+</div>
+
+<div class="rules">
+  <b>玩法：</b>每天选一个金额存入（1~365元），不按顺序，有钱就存。
+  当天金额不够时可以先存入<b>待达成池</b>，攒够了自动匹配对应天数完成填充。
+  365天全部存完总计 <b>¥66,795</b>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="st"><div class="st-val blue" id="statTotal">¥66,795</div><div class="st-lbl">计划总金额</div></div>
+  <div class="st"><div class="st-val green" id="statDone">¥0</div><div class="st-lbl">已存金额</div></div>
+  <div class="st"><div class="st-val gold" id="statPool">¥0</div><div class="st-lbl">待达成池</div></div>
+  <div class="st"><div class="st-val purple" id="statDays">0/365</div><div class="st-lbl">完成天数</div></div>
+</div>
+
+<!-- PROGRESS -->
+<div class="prog-wrap">
+  <div class="prog-hdr">
+    <span id="progLabel">0 / 365 天</span>
+    <span id="progPct">0%</span>
+  </div>
+  <div class="prog-track">
+    <div class="prog-fill" id="progFill" style="width:0%"></div>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <label>显示：</label>
+  <button class="toggle-btn active" id="togDone" onclick="toggleView('done')">✓ 已完成</button>
+  <button class="toggle-btn active" id="togAfford" onclick="toggleView('afford')">🔵 可存入</button>
+  <button class="toggle-btn active" id="togPending" onclick="toggleView('pending')">🟡 余额不足</button>
+  <button class="toggle-btn" id="togHide" onclick="toggleView('hide')">隐藏已完成</button>
+  <button class="toggle-btn" id="togBatch" onclick="toggleBatchMode()" style="margin-left:auto;border-color:rgba(248,81,73,.3);color:#f85149">📦 批量撤销</button>
+  <span id="batchInfo" style="font-size:.78rem;color:#f85149;display:none;margin-left:6px">已选 <b id="batchCount">0</b> 天　<button class="btn btn-red" onclick="batchUndo()" style="vertical-align:middle">确认撤销</button>　<button class="btn btn-sync" onclick="toggleBatchMode()" style="vertical-align:middle;font-size:.72rem">取消</button></span>
+</div>
+
+<!-- GRID -->
+<div class="grid-wrap" id="gridWrap"></div>
+
+<!-- PENDING POOL -->
+<div class="pool-section">
+  <h3>🏆 待达成池 — 攒够后自动匹配</h3>
+  <div class="pool-info">
+    <span>池中余额：<b id="poolBalance" style="cursor:pointer;text-decoration:underline dotted rgba(180,83,9,.5)" onclick="editPoolBalance()" title="点击修改">¥0</b></span>
+    <span>可匹配天数：<b id="poolMatches">0</b> 个</span>
+  </div>
+  <div class="pool-input-row">
+    <input type="number" id="poolAmt" placeholder="存入金额" min="1" step="0.01"/>
+    <button class="btn btn-gold" onclick="addToPool()">+ 存入待达池</button>
+    <button class="btn btn-green" onclick="autoFill()">⚡ 一键自动匹配</button>
+  </div>
+  <div class="pool-matches" id="poolMatchHint"></div>
+  <div class="pool-log" id="poolLog"></div>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary-card">
+  <h3>📊 存钱进度总结</h3>
+  <div id="summaryContent"></div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════
+const PLAN_TOTAL = 365 * 366 / 2; // 66795
+let state = loadState();
+
+function defaultState(){
+  return {
+    done: [],        // [1,2,3,...] 已完成的天数
+    pool: 0,         // 待达成池余额
+    poolLog: [],     // [{date, amount, note}]
+    startDate: new Date().toISOString().slice(0,10)
+  };
+}
+function loadState(){
+  try { 
+    const s = JSON.parse(localStorage.getItem('save365_state'));
+    return s && s.done ? s : defaultState();
+  } catch(e){ return defaultState(); }
+}
+function saveState(){ localStorage.setItem('save365_state', JSON.stringify(state)); }
+
+function getDoneSet(){ return new Set(state.done); }
+
+function getAffordable(pool){
+  const ds = getDoneSet();
+  const poolAmt = pool || state.pool;
+  const affordable = [];
+  for(let d=1;d<=365;d++){
+    if(ds.has(d)) continue;
+    if(d <= poolAmt) affordable.push(d);
+  }
+  return affordable.sort((a,b)=>a-b);
+}
+
+// ═══════════════════════════════════════════════
+//  BATCH UNDO
+// ═══════════════════════════════════════════════
+let batchMode = false;
+let batchSet = new Set();
+
+function toggleBatchMode(){
+  batchMode = !batchMode;
+  batchSet.clear();
+  document.getElementById('togBatch').classList.toggle('active', batchMode);
+  document.getElementById('batchInfo').style.display = batchMode ? 'inline' : 'none';
+  document.getElementById('batchCount').textContent = '0';
+  render();
+}
+
+function toggleBatchSelect(day){
+  if(!batchMode) return;
+  const ds = getDoneSet();
+  if(!ds.has(day)) return; // 只能选已完成的
+  if(batchSet.has(day)){
+    batchSet.delete(day);
+  } else {
+    batchSet.add(day);
+  }
+  document.getElementById('batchCount').textContent = batchSet.size;
+  // 更新这个格子的样式
+  const el = document.querySelector(`.cell[data-day="${day}"]`);
+  if(el) el.classList.toggle('batch-selected', batchSet.has(day));
+}
+
+function batchUndo(){
+  if(batchSet.size === 0){ showToast('请先选择要撤销的天数'); return; }
+  const days = [...batchSet];
+  const total = days.reduce((s,d)=>s+d,0);
+  if(!confirm(`确认撤销 ${days.length} 天？\n\n${days.join('、')}天\n合计 ¥${total}\n金额将退回待达成池。`)) return;
+  
+  for(const d of days){
+    state.done = state.done.filter(x => x !== d);
+    state.poolLog.push({
+      date: new Date().toISOString().slice(0,10),
+      time: new Date().toTimeString().slice(0,5),
+      amount: d,
+      note: `批量撤销第${d}天`
+    });
+  }
+  state.pool = +(state.pool + total).toFixed(2);
+  saveState();
+  batchSet.clear();
+  batchMode = false;
+  document.getElementById('togBatch').classList.remove('active');
+  document.getElementById('batchInfo').style.display = 'none';
+  showToast(`↩️ 已撤销 ${days.length} 天，¥${total} 退回待达池`);
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  VIEW TOGGLE
+// ═══════════════════════════════════════════════
+let viewState = { done:true, afford:true, pending:true, hide:false };
+
+function toggleView(key){
+  viewState[key] = !viewState[key];
+  document.getElementById('tog'+key.charAt(0).toUpperCase()+key.slice(1)).classList.toggle('active');
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  ACTIONS
+// ═══════════════════════════════════════════════
+function markDone(day){
+  const ds = getDoneSet();
+  if(ds.has(day)) return;
+  state.done.push(day);
+  saveState();
+  showToast(`✅ 第 ${day} 天已完成！存入 ¥${day}`);
+  render();
+}
+
+function undoDone(day){
+  if(!confirm(`撤销第 ${day} 天（¥${day}）？\n金额将退回待达成池。`)) return;
+  state.done = state.done.filter(d => d !== day);
+  state.pool = +(state.pool + day).toFixed(2);
+  state.poolLog.push({
+    date: new Date().toISOString().slice(0,10),
+    time: new Date().toTimeString().slice(0,5),
+    amount: day,
+    note: `撤销第${day}天`
+  });
+  saveState();
+  showToast(`↩️ 第 ${day} 天已撤销，¥${day} 退回待达池`);
+  render();
+}
+
+function editPoolBalance(){
+  const cur = state.pool.toFixed(2);
+  const val = prompt(`当前待达成池余额：¥${cur}\n\n请输入新的金额（正数=增加，负数=扣减，直接填最终金额）：`, cur);
+  if(val === null) return;
+  const num = parseFloat(val);
+  if(isNaN(num)){ showToast('❌ 请输入有效数字'); return; }
+  const diff = +(num - state.pool).toFixed(2);
+  if(diff === 0) return;
+  state.pool = +num.toFixed(2);
+  if(state.pool < 0) state.pool = 0;
+  state.poolLog.push({
+    date: new Date().toISOString().slice(0,10),
+    time: new Date().toTimeString().slice(0,5),
+    amount: diff,
+    note: diff > 0 ? `手动调增` : `手动调减`
+  });
+  saveState();
+  showToast(`✅ 待达成池已调整为 ¥${state.pool.toFixed(2)}（${diff>0?'+':''}¥${diff.toFixed(2)}）`);
+  render();
+  tryAutoFill();
+}
+
+function addToPool(){
+  const amt = parseFloat(document.getElementById('poolAmt').value);
+  if(!amt||amt<=0){ showToast('请输入有效金额'); return; }
+  state.pool = +(state.pool + amt).toFixed(2);
+  state.poolLog.push({
+    date: new Date().toISOString().slice(0,10),
+    time: new Date().toTimeString().slice(0,5),
+    amount: +amt.toFixed(2),
+    note: '手动存入'
+  });
+  saveState();
+  document.getElementById('poolAmt').value='';
+  showToast(`💰 已存入 ¥${amt.toFixed(2)} 到待达池`);
+  render();
+  tryAutoFill();
+}
+
+function autoFill(){
+  tryAutoFill();
+}
+
+function tryAutoFill(){
+  const affordable = getAffordable();
+  if(!affordable.length){
+    showToast('池中余额不足，继续攒钱吧！');
+    return;
+  }
+  // 自动填充所有能匹配的，优先填小的
+  let filled = [];
+  let tempPool = state.pool;
+  for(const d of affordable){
+    if(tempPool >= d){
+      state.done.push(d);
+      tempPool -= d;
+      filled.push(d);
+      state.poolLog.push({
+        date: new Date().toISOString().slice(0,10),
+        time: new Date().toTimeString().slice(0,5),
+        amount: -d,
+        note: `自动匹配第${d}天`
+      });
+    }
+  }
+  state.pool = +tempPool.toFixed(2);
+  if(state.pool < 0) state.pool = 0;
+  saveState();
+  if(filled.length){
+    showToast(`⚡ 自动完成 ${filled.length} 天！${filled.join('、')}天`);
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════
+function render(){
+  renderStats();
+  renderGrid();
+  renderPool();
+  renderSummary();
+}
+
+function renderStats(){
+  const ds = getDoneSet();
+  const doneCount = ds.size;
+  const doneAmt = [...ds].reduce((s,d)=>s+d,0);
+  const pct = (doneCount/365*100).toFixed(1);
+
+  document.getElementById('statDone').textContent = '¥'+doneAmt.toLocaleString();
+  document.getElementById('statPool').textContent = '¥'+state.pool.toFixed(2);
+  document.getElementById('statDays').textContent = doneCount+'/365';
+
+  document.getElementById('progFill').style.width = pct+'%';
+  document.getElementById('progLabel').textContent = `${doneCount} / 365 天`;
+  document.getElementById('progPct').textContent = pct+'%';
+}
+
+function renderGrid(){
+  const ds = getDoneSet();
+  const affordable = new Set(getAffordable());
+  const wrap = document.getElementById('gridWrap');
+  
+  const MONTHS = [0,31,60,91,121,152,182,213,244,274,305,335];
+  const MONTH_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+
+  let html = '<div class="grid">';
+  for(let m=0;m<12;m++){
+    const start = MONTHS[m]+1;
+    const end = m<11 ? MONTHS[m+1] : 365;
+    
+    // count visible days in this month
+    let visibleCount = 0;
+    for(let d=start;d<=end;d++){
+      const isDone = ds.has(d);
+      if(viewState.hide && isDone) continue;
+      visibleCount++;
+    }
+    if(visibleCount === 0) continue;
+    
+    html += `<div class="month-sep">${MONTH_NAMES[m]}（第${start}~${end}天）</div>`;
+    
+    for(let d=start;d<=end;d++){
+      const isDone = ds.has(d);
+      const canAfford = affordable.has(d);
+      
+      // skip hidden
+      if(viewState.hide && isDone) continue;
+      if(!viewState.done && isDone) continue;
+      if(!viewState.afford && canAfford && !isDone) continue;
+      if(!viewState.pending && !canAfford && !isDone) continue;
+
+      let cls = '';
+      if(isDone) cls = 'done';
+      else if(canAfford) cls = 'affordable';
+      else cls = 'pending';
+      
+      // 批量选中高亮
+      if(batchMode && batchSet.has(d)) cls += ' batch-selected';
+      
+      let click = '';
+      if(batchMode && isDone){
+        click = `onclick="toggleBatchSelect(${d})"`;
+      } else if(isDone){
+        click = `onclick="undoDone(${d})"`;
+      } else if(canAfford){
+        click = `onclick="markDone(${d})"`;
+      }
+      
+      html += `<div class="cell ${cls}" data-day="${d}" ${click} title="${isDone?(batchMode?'点击选择':'点击撤销'):canAfford?'点击完成':d+'元'}">
+        <div class="cell-inner">
+          <div class="cell-day">第${d}天 <span class="done-check">✓</span></div>
+          <div class="cell-amt">¥${d}</div>
+        </div>
+      </div>`;
+    }
+  }
+  html += '</div>';
+  wrap.innerHTML = html;
+}
+
+function renderPool(){
+  document.getElementById('poolBalance').textContent = '¥'+state.pool.toFixed(2);
+  
+  const affordable = getAffordable();
+  document.getElementById('poolMatches').textContent = affordable.length + ' 个';
+  
+  const hint = document.getElementById('poolMatchHint');
+  if(affordable.length > 0){
+    const next5 = affordable.slice(0,5);
+    const totalNeeded = affordable.reduce((s,d)=>s+d,0);
+    hint.innerHTML = `可匹配：<b>${next5.join('天、')}${affordable.length>5?'等':''}</b>　共需 <b>¥${totalNeeded}</b>`;
+  } else if(state.pool > 0){
+    const ds = getDoneSet();
+    const nextUndone = [];
+    for(let d=1;d<=365;d++){
+      if(!ds.has(d)){ nextUndone.push(d); if(nextUndone.length>=3) break; }
+    }
+    const need = Math.min(...nextUndone);
+    const gap = +(need - state.pool).toFixed(2);
+    hint.innerHTML = `最近未完成：第${nextUndone.join('、')}天　距第${need}天还差 <b>¥${gap>0?gap:0}</b>`;
+  } else {
+    hint.innerHTML = '';
+  }
+
+  // log
+  const logEl = document.getElementById('poolLog');
+  if(!state.poolLog.length){
+    logEl.innerHTML = '<div style="color:#484f58;font-size:.75rem;padding:8px 0">暂无记录</div>';
+    return;
+  }
+  const logs = [...state.poolLog].reverse().slice(0,20);
+  logEl.innerHTML = logs.map(l=>{
+    const color = l.amount>0?'color:#d29922':'color:#3fb950';
+    const sign = l.amount>0?'+':'';
+    return `<div class="pool-log-item">${l.date} ${l.time||''} — <b style="${color}">${sign}¥${Math.abs(l.amount)}</b> ${l.note}</div>`;
+  }).join('');
+}
+
+function renderSummary(){
+  const ds = getDoneSet();
+  const doneCount = ds.size;
+  const doneAmt = [...ds].reduce((s,d)=>s+d,0);
+  const remaining = PLAN_TOTAL - doneAmt;
+  const avgDone = doneCount > 0 ? (doneAmt/doneCount).toFixed(1) : 0;
+  
+  // remaining days by amount ranges
+  const ranges = [
+    {label:'¥1~¥50', min:1, max:50},
+    {label:'¥51~¥100', min:51, max:100},
+    {label:'¥101~¥200', min:101, max:200},
+    {label:'¥201~¥365', min:201, max:365}
+  ];
+  let rangeHtml = '';
+  for(const r of ranges){
+    let cnt=0, sum=0;
+    for(let d=r.min;d<=r.max;d++){
+      if(!ds.has(d)){ cnt++; sum+=d; }
+    }
+    rangeHtml += `<div class="sum-row">
+      <span class="sum-label">${r.label}</span>
+      <span class="sum-val o">${cnt}天待完成（¥${sum.toLocaleString()}）</span>
+    </div>`;
+  }
+
+  const el = document.getElementById('summaryContent');
+  el.innerHTML = `
+    <div class="sum-row"><span class="sum-label">已完成天数</span><span class="sum-val g">${doneCount} / 365</span></div>
+    <div class="sum-row"><span class="sum-label">已存金额</span><span class="sum-val g">¥${doneAmt.toLocaleString()}</span></div>
+    <div class="sum-row"><span class="sum-label">待达成池</span><span class="sum-val o">¥${state.pool.toFixed(2)}</span></div>
+    <div class="sum-row"><span class="sum-label">剩余待存</span><span class="sum-val b">¥${Math.max(0,remaining).toLocaleString()}</span></div>
+    <div class="sum-row"><span class="sum-label">平均每天存</span><span class="sum-val">¥${avgDone}</span></div>
+    <div style="margin-top:12px;font-size:.78rem;color:#58a6ff;font-weight:600">剩余分布</div>
+    ${rangeHtml}
+  `;
+}
+
+// ═══════════════════════════════════════════════
+//  CLOUD SYNC (GitHub Gist)
+// ═══════════════════════════════════════════════
+const GIST_KEY = 'save365_gist';
+const GIST_FILE = 'save365_data.json';
+
+function getGistId(){
+  return localStorage.getItem(GIST_KEY) || '';
+}
+function setGistId(id){
+  localStorage.setItem(GIST_KEY, id);
+}
+
+// 首次配置 Gist Token 和 Gist ID
+function setupGist(isReset){
+  const oldToken = isReset ? '' : (localStorage.getItem('save365_gist_token') || '');
+  const oldGistId = isReset ? '' : getGistId();
+  
+  const token = prompt(
+    (isReset ? '🔧 重新配置云端\n\n' : '') +
+    '请输入 GitHub Personal Access Token（需要 gist 权限）\n\n获取方式：\n1. 打开 github.com/settings/tokens\n2. 点 Generate new token (classic)\n3. 勾选 gist 权限\n4. 生成后复制粘贴到此处',
+    oldToken);
+  if(!token) return false;
+  localStorage.setItem('save365_gist_token', token);
+
+  const gistId = prompt('请输入 Gist ID（如果已有则填入，没有则留空会自动创建）：', oldGistId);
+  if(gistId && gistId.trim()){
+    setGistId(gistId.trim());
+  } else {
+    setGistId('');  // 清空旧ID，下次保存会重新创建
+  }
+  showToast(isReset ? '⚙️ 配置已更新' : '✅ 配置完成');
+  return true;
+}
+
+function resetGistConfig(){
+  const hasConfig = localStorage.getItem('save365_gist_token') || getGistId();
+  const msg = hasConfig 
+    ? `当前配置：\nGist ID: ${getGistId() || '未设置'}\nToken: ${localStorage.getItem('save365_gist_token') ? '已设置 ✓' : '未设置'}\n\n点确定重新配置，取消不变`
+    : '尚未配置云端，点确定开始配置';
+  
+  if(!confirm(msg)) return;
+  setupGist(true);
+}
+
+async function cloudSave(){
+  const token = localStorage.getItem('save365_gist_token');
+  if(!token){ 
+    if(!setupGist()) return;
+  }
+
+  const btn = document.getElementById('btnCloudSave');
+  btn.disabled = true;
+  btn.textContent = '⏳ 保存中...';
+  try {
+    const gistId = getGistId();
+    const data = JSON.stringify(state, null, 2);
+    const ts = new Date().toISOString().slice(0,19).replace('T',' ');
+    const content = {
+      state: state,
+      lastSave: ts,
+      version: '1.0'
+    };
+
+    if(gistId){
+      // 更新已有 Gist
+      const res = await fetch('https://api.github.com/gists/' + gistId, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          description: '365存钱计划数据备份 - ' + ts,
+          files: { [GIST_FILE]: { content: JSON.stringify(content, null, 2) } }
+        })
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+    } else {
+      // 创建新 Gist
+      const res = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          description: '365存钱计划数据备份',
+          public: false,
+          files: { [GIST_FILE]: { content: JSON.stringify(content, null, 2) } }
+        })
+      });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      const result = await res.json();
+      setGistId(result.id);
+    }
+    showToast('☁️ 数据已保存到云端！' + new Date().toLocaleTimeString());
+  } catch(err){
+    showToast('❌ 云端保存失败：' + err.message);
+    // 如果 token 过期或无效，清除缓存让用户重新配置
+    if(err.message.includes('401') || err.message.includes('403')){
+      localStorage.removeItem('save365_gist_token');
+      showToast('❌ Token 已失效，请重新配置');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '☁️ 云端保存';
+  }
+}
+
+async function cloudLoad(){
+  const gistId = getGistId();
+  const token = localStorage.getItem('save365_gist_token');
+  if(!gistId || !token){
+    if(!setupGist()) return;
+  }
+  const useGistId = getGistId();
+  const useToken = localStorage.getItem('save365_gist_token');
+  if(!useGistId){
+    showToast('❌ 还没有云端数据，请先保存一次');
+    return;
+  }
+
+  const btn = document.getElementById('btnCloudLoad');
+  btn.disabled = true;
+  btn.textContent = '⏳ 加载中...';
+  try {
+    const res = await fetch('https://api.github.com/gists/' + useGistId, {
+      headers: { 'Authorization': 'Bearer ' + useToken }
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const gist = await res.json();
+    const file = gist.files[GIST_FILE];
+    if(!file) throw new Error('Gist 中没有找到数据文件');
+    const cloud = JSON.parse(file.content);
+    if(!cloud.state || !cloud.state.done){
+      throw new Error('数据格式不正确');
+    }
+
+    const cloudCount = cloud.state.done.length;
+    const localCount = state.done.length;
+    
+    const action = confirm(
+      `云端数据：${cloudCount}天已存，最后保存 ${cloud.lastSave || '未知'}\n` +
+      `本地数据：${localCount}天已存\n\n` +
+      `确定 = 合并（保留本地+导入云端新增）\n` +
+      `取消 = 替换（使用云端数据覆盖本地）`
+    );
+
+    if(action){
+      // 合并
+      const existing = getDoneSet();
+      let added = 0;
+      for(const d of cloud.state.done){
+        if(!existing.has(d)){ state.done.push(d); added++; }
+      }
+      state.pool = +(state.pool + (cloud.state.pool||0)).toFixed(2);
+      state.poolLog = [...state.poolLog, ...(cloud.state.poolLog||[])];
+      saveState();
+      render();
+      showToast(`☁️ 合并完成，新增 ${added} 天`);
+    } else {
+      // 替换
+      state = cloud.state;
+      saveState();
+      render();
+      showToast('☁️ 已从云端恢复数据');
+    }
+  } catch(err){
+    showToast('❌ 云端加载失败：' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⬇️ 云端加载';
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  EXPORT EXCEL（ExcelJS 美化版）
+// ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  EXPORT EXCEL（ExcelJS 美化版）
+// ═══════════════════════════════════════════════
+async function exportExcel(){
+  const ds = getDoneSet();
+  const MONTHS = [0,31,60,91,121,152,182,213,244,274,305,335];
+  const MONTH_NAMES = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  const doneAmt = [...ds].reduce((s,d)=>s+d,0);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '365存钱计划';
+  wb.created = new Date();
+
+  const thinBorder = {top:{style:'thin',color:{argb:'D9D9D9'}},bottom:{style:'thin',color:{argb:'D9D9D9'}},left:{style:'thin',color:{argb:'D9D9D9'}},right:{style:'thin',color:{argb:'D9D9D9'}}};
+  const cAlign = {horizontal:'center',vertical:'middle',wrapText:true};
+
+  // ── Sheet1: 总览 ──
+  const ws1 = wb.addWorksheet('总览',{properties:{tabColor:{argb:'2563EB'}}});
+  ws1.columns = [{width:18},{width:20},{width:16},{width:16}];
+
+  ws1.mergeCells('A1:B1');
+  const t1 = ws1.getCell('A1');
+  t1.value = '💰 365存钱计划 — 总览';
+  t1.font = {bold:true,size:16,color:{argb:'2563EB'}};
+  t1.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'E8F0FE'}};
+  t1.alignment = {horizontal:'center',vertical:'middle'};
+  ws1.getRow(1).height = 40;
+  ws1.addRow([]);
+
+  const h1r = ws1.addRow(['指标','数值']);
+  h1r.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'FFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'2563EB'}};c.border=thinBorder;c.alignment=cAlign;});
+  h1r.height = 28;
+
+  const metrics = [
+    ['计划总金额',PLAN_TOTAL,'16A34A','¥#,##0'],
+    ['已存金额',doneAmt,'16A34A','¥#,##0'],
+    ['剩余金额',Math.max(0,PLAN_TOTAL-doneAmt),'2563EB','¥#,##0'],
+    ['已完成天数',ds.size+' / 365','7C3AED',null],
+    ['完成进度',(ds.size/365*100).toFixed(1)+'%','D97706',null],
+    ['待达成池余额',state.pool,'D97706','¥#,##0.00'],
+    ['开始日期',state.startDate||'-','4B5563',null],
+    ['导出时间',new Date().toLocaleString(),'6B7280',null],
+  ];
+  metrics.forEach(([label,val,color,fmt],i)=>{
+    const row = ws1.addRow([label,val]);
+    row.height = 26;
+    const bg = i%2===0?'F9FAFB':'FFFFFF';
+    row.getCell(1).font={size:11,color:{argb:'4B5563'}};row.getCell(1).border=thinBorder;row.getCell(1).alignment=cAlign;row.getCell(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
+    const b = row.getCell(2);
+    b.font={bold:true,size:12,color:{argb:color}};b.border=thinBorder;b.alignment=cAlign;b.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};
+    if(fmt) b.numFmt = fmt;
+  });
+
+  ws1.addRow([]);
+  const mh = ws1.addRow(['月度统计','完成天数','已存金额','天数目标']);
+  mh.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'FFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'16A34A'}};c.border=thinBorder;c.alignment=cAlign;});
+  mh.height = 28;
+
+  let totalD=0,totalA=0;
+  for(let m=0;m<12;m++){
+    const start=MONTHS[m]+1,end=m<11?MONTHS[m+1]:365;
+    let cnt=0,sum=0;
+    for(let d=start;d<=end;d++){if(ds.has(d)){cnt++;sum+=d;}}
+    totalD+=cnt;totalA+=sum;
+    const row=ws1.addRow([MONTH_NAMES[m],cnt,sum,end-start+1]);
+    row.height=24;
+    const bg=m%2===0?'F0FDF4':'FFFFFF';
+    row.eachCell(c=>{c.border=thinBorder;c.alignment=cAlign;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};c.font={size:11,color:{argb:'374151'}};});
+    row.getCell(3).numFmt='¥#,##0';
+  }
+  const sr=ws1.addRow(['合计',totalD,totalA,365]);
+  sr.height=28;sr.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'16A34A'}};c.border=thinBorder;c.alignment=cAlign;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'DCFCE7'}};});
+  sr.getCell(3).numFmt='¥#,##0';
+
+  // ── Sheet2: 365天明细 ──
+  const ws2=wb.addWorksheet('365天明细',{properties:{tabColor:{argb:'16A34A'}}});
+  ws2.columns=[{width:10},{width:14},{width:14},{width:20}];
+  const h2=ws2.addRow(['天数','目标金额','状态','备注']);
+  h2.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'FFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'2563EB'}};c.border=thinBorder;c.alignment=cAlign;});
+  h2.height=28;
+
+  for(let d=1;d<=365;d++){
+    const isDone=ds.has(d);
+    const row=ws2.addRow([d,d,isDone?'✅ 已完成':'⬜ 未完成','']);
+    row.height=22;
+    const bg=isDone?'F0FDF4':(d%2===0?'F9FAFB':'FFFFFF');
+    row.eachCell(c=>{c.border=thinBorder;c.alignment=cAlign;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};c.font={size:10,color:{argb:isDone?'16A34A':'6B7280'}};});
+    row.getCell(2).numFmt='¥#,##0';
+    if(isDone) row.getCell(3).font={bold:true,size:10,color:{argb:'16A34A'}};
+  }
+
+  // ── Sheet3: 已完成记录 ──
+  const doneList=[...state.done].sort((a,b)=>a-b);
+  const ws3=wb.addWorksheet('已完成记录',{properties:{tabColor:{argb:'7C3AED'}}});
+  ws3.columns=[{width:8},{width:10},{width:14},{width:14},{width:20}];
+  const h3=ws3.addRow(['序号','天数','金额','完成状态','备注']);
+  h3.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'FFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'7C3AED'}};c.border=thinBorder;c.alignment=cAlign;});
+  h3.height=28;
+
+  doneList.forEach((d,i)=>{
+    const row=ws3.addRow([i+1,d,d,'✅ 已完成','']);
+    row.height=22;
+    const bg=i%2===0?'F5F3FF':'FFFFFF';
+    row.eachCell(c=>{c.border=thinBorder;c.alignment=cAlign;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};c.font={size:10,color:{argb:'374151'}};});
+    row.getCell(3).numFmt='¥#,##0';
+  });
+
+  // ── Sheet4: 待达成池日志 ──
+  const poolLogs=state.poolLog||[];
+  const ws4=wb.addWorksheet('待达成池日志',{properties:{tabColor:{argb:'D97706'}}});
+  ws4.columns=[{width:8},{width:14},{width:10},{width:14},{width:24}];
+  const h4=ws4.addRow(['序号','日期','时间','金额变动','备注']);
+  h4.eachCell(c=>{c.font={bold:true,size:11,color:{argb:'FFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'D97706'}};c.border=thinBorder;c.alignment=cAlign;});
+  h4.height=28;
+
+  poolLogs.forEach((l,i)=>{
+    const row=ws4.addRow([i+1,l.date,l.time||'',l.amount,l.note]);
+    row.height=22;
+    const bg=i%2===0?'FFFBEB':'FFFFFF';
+    row.eachCell(c=>{c.border=thinBorder;c.alignment=cAlign;c.fill={type:'pattern',pattern:'solid',fgColor:{argb:bg}};c.font={size:10,color:{argb:'374151'}};});
+    const ac=row.getCell(4);ac.numFmt='¥#,##0.00';ac.font={bold:true,size:10,color:{argb:l.amount>=0?'16A34A':'F85149'}};
+  });
+
+  // 导出
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `365存钱计划_${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📊 美化Excel已导出');
+}
+
+// ═══════════════════════════════════════════════
+//  EXPORT / IMPORT JSON
+// ═══════════════════════════════════════════════
+function exportData(){
+  const data = JSON.stringify(state, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `save365-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📤 数据已导出');
+}
+
+function importData(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if(!imported.done || !Array.isArray(imported.done)){ showToast('❌ 文件格式不正确'); return; }
+      const action = confirm('确定 = 合并（保留现有+导入新增）\n取消 = 替换（清空现有，使用导入数据）');
+      if(action){
+        const existing = getDoneSet();
+        let added=0;
+        for(const d of imported.done){
+          if(!existing.has(d)){ state.done.push(d); added++; }
+        }
+        state.pool = +(state.pool + (imported.pool||0)).toFixed(2);
+        showToast(`✅ 合并完成，新增 ${added} 天`);
+      } else {
+        state = imported;
+        showToast('✅ 数据已替换');
+      }
+      saveState();
+      render();
+    } catch(err){
+      showToast('❌ 读取失败：'+err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ═══════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+render();
+</script>
+</body>
+</html>
